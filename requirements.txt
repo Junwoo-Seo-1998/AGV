@@ -1,0 +1,36 @@
+# --- 기본 연산 및 데이터 처리 (Python 3.6 호환 버전) ---
+# Python 3.6은 numpy 1.20 이상을 지원하지 않습니다.
+numpy<1.20
+
+# --- 이미지 처리 ---
+# Pillow 9.0 이상은 Python 3.6을 지원하지 않습니다.
+Pillow<9.0
+
+# --- JetBot 및 Jupyter 위젯 ---
+traitlets>=4.3
+ipywidgets>=7.0
+jupyterlab
+
+# --- OCR API 통신용 (Clova OCR 사용 시 필요 예상) ---
+requests
+
+# ---------------------------------------------------------
+# [주의] 아래 패키지들은 Jetson Nano에서 pip install로 설치하지 않는 것을 권장합니다.
+# 이미 설치되어 있는지 확인 후, 없다면 주석(#)을 제거하고 시도하거나
+# NVIDIA 공식 가이드를 따라 설치해야 합니다.
+# ---------------------------------------------------------
+
+# 1. OpenCV
+# Jetson은 보통 apt-get install python3-opencv로 설치된 버전을 사용합니다.
+# pip로 설치 시 'Illegal instruction' 에러가 발생할 수 있습니다.
+# opencv-python
+
+# 2. PyTorch & Torchvision
+# Jetson Nano는 아키텍처(aarch64)에 맞는 whl 파일을 따로 다운로드해 설치해야 합니다.
+# 아래 버전은 예시이며, 사용 중인 JetPack 버전에 맞춰야 합니다.
+# torch
+# torchvision
+
+# 3. JetBot 라이브러리
+# 보통 저장소를 clone 하여 'python3 setup.py install'로 설치합니다.
+# jetbot
