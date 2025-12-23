@@ -20,7 +20,7 @@ class AGVHardware:
 
         # 서보 컨트롤러 초기화
         if TTLServo:
-            self.servo = TTLServo()
+            self.servo = TTLServo
         else:
             self.servo = None
 
