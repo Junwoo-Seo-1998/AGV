@@ -38,7 +38,37 @@ class AGVHardware:
         # 카메라는 계속 켜두어야 OCR이 가능하므로 camera.stop()은 호출하지 않음 (필요시 추가)
         
     def rotate_camera(self, angle, servo_id):
-        """카메라를 지정된 각도로 회전 (OCRTask 코드 참조)"""
         if self.servo:
             self.servo.servoAngleCtrl(servo_id, angle, 1, 100)
             time.sleep(1.0) # 회전 후 안정화 대기
+
+    # [추가] 짐 집기 동작 (toy_clearner 로직 이식) -> 이거는 실제로 코드 실행 해봐야 할듯 내일 일찍 가서
+    def arm_grab(self):
+        print("🦾 [HW] 짐 잡기 동작 시작")
+        if self.servo:
+            # 1. 팔 내리기 (좌표 제어 예시)
+            self.servo.xyInput(200, -90)
+            time.sleep(1.5)
+            # 2. 그리퍼 닫기 (ID:4, Angle:40)
+            self.servo.servoAngleCtrl(4, 40, -1, 150)
+            time.sleep(1.5)
+            # 3. 팔 들어올리기 (주행 자세)
+            self.servo.servoAngleCtrl(2, 0, 1, 200)
+            self.servo.servoAngleCtrl(3, 0, 1, 200)
+            time.sleep(1.5)
+        return True
+    
+    # [추가] 짐 놓기 동작
+    def arm_release(self):
+        print("🦾 [HW] 짐 놓기 동작 시작")
+        if self.servo:
+            # 1. 팔 내리기
+            self.servo.xyInput(200, -90)
+            time.sleep(1.5)
+            # 2. 그리퍼 열기 (ID:4, Angle:100)
+            self.servo.servoAngleCtrl(4, 100, 1, 150)
+            time.sleep(1.5)
+            # 3. 팔 원위치
+            self.servo.servoAngleCtrl(2, 0, 1, 200)
+            self.servo.servoAngleCtrl(3, 0, 1, 200)
+            time.sleep(1.0)
