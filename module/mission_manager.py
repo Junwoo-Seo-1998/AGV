@@ -4,6 +4,7 @@ from .context import RobotContext
 from .states.tracking_state import LineTrackingState
 from .states.approach_state import ApproachState
 from .states.ocr_state import OCRCheckState
+from .states.pickup_state import PickupState
 
 import log.auto_logger
 class MissionManager:
@@ -16,6 +17,7 @@ class MissionManager:
             "TRACKING": LineTrackingState(hardware, brain),
             "APPROACH": ApproachState(hardware, brain),
             "OCR_CHECK": OCRCheckState(hardware),
+            "PICKUP": PickupState(hardware), # 이름 변경 (PICKUP)
             "IDLE": None
         }
         # [핵심] 모든 State의 'process' 함수에 '도청 장치(Verbose Hook)' 설치

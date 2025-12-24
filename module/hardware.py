@@ -17,6 +17,10 @@ class AGVHardware:
 
         if TTLServo:
             self.servo = TTLServo
+            # 초기화: 팔을 안전한 위치(Up)로 이동 & 그리퍼 열기
+            self.servo.servoAngleCtrl(2, 0, 1, 150)
+            self.servo.servoAngleCtrl(3, 0, 1, 150)
+            self.servo.servoAngleCtrl(4, 100, 1, 150) 
         else:
             self.servo = None
 
@@ -41,23 +45,46 @@ class AGVHardware:
         self.robot.right_motor.value = float(right)
 
     def stop(self):
-        """주행만 정지 (카메라는 켜둠 - OCR 등을 위해)"""
+        """주행만 정지 (카메라는 켜둠)"""
         self.robot.stop()
         
     def rotate_camera(self, angle, servo_id):
         if self.servo:
-            self.servo.servoAngleCtrl(servo_id, angle, 1, 100)
-            time.sleep(1.0) # 회전 후 안정화 대기
+            # servoAngleCtrl(ID, Angle, Speed, Direction)
+            # 기존 코드: self.servo.servoAngleCtrl(servo_id, angle, 1, 100)
+            self.servo.servoAngleCtrl(servo_id, angle, 1, 500)
+            time.sleep(1.0)
 
-    # [신규 추가] 프로그램 완전 종료 시 호출
-    def close(self):
-        """모터와 카메라를 모두 확실하게 정지 및 자원 해제"""
-        self.stop() # 모터 정지
-        if self.camera:
-            self.camera.stop()
-            print("📷 카메라 자원 해제 완료")
-            
-log.auto_logger.hook_agv_drive(AGVHardware)
+    # [신규 추가] 짐 수거(Grab) 시퀀스
+    def grab_sequence(self):
+        if not self.servo:
+            print("⚠️ 서보 모터가 연결되지 않았습니다.")
+            return
 
+        print("🦾 [GRAB] 물체 수거를 시작합니다...")
+        
+        # 1. 팔을 내려서 물체 위치로 이동 (GRAB Position)
+        self.servo.xyInput(200, -90)
+        time.sleep(1.5)
+        
+        # 2. 그리퍼 닫기 (물체 잡기)
+        self.servo.servoAngleCtrl(4, 40, -1, 150)
+        time.sleep(1.0)
+        
+        print("📦 [GRAB] 물체 획득! 바구니로 이동합니다.")
 
-log.auto_logger.hook_agv_drive(AGVHardware)
+        # 3. 바구니로 이동 (PLACE IN BASKET) - 뒤로 젖힘
+        self.servo.servoAngleCtrl(2, 100, -1, 200)
+        self.servo.servoAngleCtrl(3, 100, 1, 200)
+        time.sleep(3.0) 
+        
+        # 4. 그리퍼 열기 (떨구기)
+        self.servo.servoAngleCtrl(4, 100, 1, 150)
+        time.sleep(1.0)
+        
+        # 5. 팔 원위치 (Initial Position)
+        self.servo.servoAngleCtrl(2, 0, 1, 200)
+        self.servo.servoAngleCtrl(3, 0, 1, 200)
+        time.sleep(1.5)
+        
+        print("✅ [GRAB] 수거 완료.")

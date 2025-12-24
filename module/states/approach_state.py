@@ -42,14 +42,12 @@ class ApproachState:
             image = self.hw.get_frame()
             if image is None: continue
             
-            # 2. 라인 트래킹 계산 (Brain 사용)
-            #    여기서는 색상을 무시하고 오직 '라인'만 보고 갑니다.
+            # 2. 라인 트래킹 계산 (Brain 사용) - 색상 무시, 라인만 추적
             left, right = self.brain.calculate(image, context)
             
             # 3. 구동
             self.hw.drive(left, right)
             
-            # (짧은 대기 - CPU 점유율 방지 및 카메라 FPS 맞춤)
             time.sleep(0.01)
         
         # 속도 복구 및 정지
@@ -57,7 +55,15 @@ class ApproachState:
         self.hw.stop()
         
         print("🛑 오버런 완료. 정지했습니다.")
-        return "OCR_CHECK"
+        
+        # [여기가 수정된 부분입니다]
+        # 오렌지색이면 물체 수거(PICKUP) 모드로, 아니면 OCR 모드로 이동
+        if context.last_detected_color == 'orange':
+            print("👉 오렌지색(짐 수거) 감지 -> PICKUP 상태로 전환")
+            return "PICKUP"
+        else:
+            print("👉 배송지 도착 -> OCR_CHECK 상태로 전환")
+            return "OCR_CHECK"
 
     def process(self, context):
         image = self.hw.get_frame()
