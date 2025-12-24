@@ -88,3 +88,21 @@ class AGVHardware:
         time.sleep(1.5)
         
         print("✅ [GRAB] 수거 완료.")
+    def close(self):
+        """카메라 및 모터 리소스를 안전하게 해제합니다."""
+        print("\n>>> [Hardware] Closing resources...")
+        try:
+            # 1. 모터 정지
+            if hasattr(self, 'stop'):
+                self.stop()
+            elif hasattr(self, 'robot'):
+                self.robot.stop()
+            print(">>> [Hardware] Motors stopped.")
+
+            # 2. 카메라 해제 (OpenCV 사용 시)
+            if hasattr(self, 'camera') and self.camera is not None:
+                self.camera.release()
+                print(">>> [Hardware] Camera released.")
+                
+        except Exception as e:
+            print(f">>> [Hardware] Error during closing: {e}")
