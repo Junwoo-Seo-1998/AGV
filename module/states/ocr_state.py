@@ -7,17 +7,14 @@ class OCRCheckState:
         self.hw = hardware
         # OCR 탐지기 초기화
         self.detector = PlateNumberDetector(model="clova") 
-
-    def process(self, context):
-        print(f"[OCR State] 번호판 탐색 시작 (타겟: {context.target_plate})")
         
+    def on_enter(self, context):
+        print(f"📸 OCR 모드 진입. 정지 후 촬영 준비.")
         self.hw.stop()
-        
-        # [수정] OCR 인식을 위해 고해상도(816x616)로 변경
         self.hw.set_camera_resolution(816, 616)
-
         time.sleep(0.5)
-
+        
+    def process(self, context):
         # 카메라 회전
         self.hw.rotate_camera(-60, 1)
         #self.hw.rotate_camera(45, 5)

@@ -19,4 +19,5 @@ class PlateResult:
 class ColorRecognitionResult:
     color: str
     area_ratio: float
+    center_y: int = 0
     mask: Optional[np.ndarray] = None
