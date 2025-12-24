@@ -15,10 +15,10 @@ class LineTrackingState:
 
         # 색상 감지
         color_res = self.color_recognizer.recognize(image)
-        if color_res and context.last_detected_color != color_res.color:
-            print(f"🎨 색상 감지: {color_res.color}")
-            context.last_detected_color = color_res.color 
-            return "OCR_CHECK"
+        if color_res:
+            # 색이 보이면 바로 멈추지 말고 '접근 상태'로 넘김
+            print(f"🎨 색상 발견! 접근 모드 진입")
+            return "APPROACH"
         elif not color_res:
             context.last_detected_color = None
 

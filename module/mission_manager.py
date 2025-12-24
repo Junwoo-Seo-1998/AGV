@@ -5,6 +5,7 @@ from .context import RobotContext
 from .states.tracking_state import LineTrackingState
 from .states.ocr_state import OCRCheckState
 from .states.find_target_state import FindTargetState
+from .states.approach_state import ApproachState
 
 class MissionManager:
     def __init__(self, hardware, brain):
@@ -15,6 +16,7 @@ class MissionManager:
         self.states = {
             "TRACKING": LineTrackingState(hardware, brain),
             "OCR_CHECK": OCRCheckState(hardware),
+            "APPROACH": ApproachState(hardware, brain),
             "FIND_TARGET": OCRCheckState(hardware),
             "IDLE": None
         }

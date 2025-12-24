@@ -113,9 +113,16 @@ class ColorRecognizer:
                 largest_color_mask = roi_color_mask
 
         if largest_area_size >= min_detection_area_ratio:
+            
+            M = cv2.moments(largest_color_mask)
+            cy = 0
+            if M["m00"] > 0:
+                cy = int(M["m01"] / M["m00"]) # 중심 Y좌표
+            
             return ColorRecognitionResult(
                 color=largest_color,
                 area_ratio=largest_area_size,
+                center_y=cy,
                 mask=largest_color_mask if return_mask else None
             )
         else:
