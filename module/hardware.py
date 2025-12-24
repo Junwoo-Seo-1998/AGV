@@ -1,6 +1,7 @@
 from jetbot import Robot, Camera
 import time
-
+import log.auto_logger
+from log.robot_monitor import monitor  # drive 함수에서 직접 로그를 보내기 위해 가져옴
 # 서보 라이브러리 임포트 (없는 경우 예외처리)
 try:
     from SCSCtrl import TTLServo
@@ -54,8 +55,8 @@ class AGVHardware:
         time.sleep(0.5)
 
     def drive(self, left, right):
-        self.robot.left_motor.value = left
-        self.robot.right_motor.value = right
+        self.robot.left_motor.value = float(left)
+        self.robot.right_motor.value = float(right)
 
     def stop(self):
         self.robot.stop()
