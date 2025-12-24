@@ -50,7 +50,6 @@ class AGVHardware:
         """주행만 정지 (카메라는 켜둠)"""
         self.robot.stop()
         
-    # [복구됨] OCR 상태에서 카메라 각도 조절에 사용
     def rotate_camera(self, angle, servo_id):
         if self.servo:
             # servoAngleCtrl(ID, Angle, Speed, Direction)
