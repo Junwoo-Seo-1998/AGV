@@ -106,3 +106,4 @@ class AGVHardware:
                 
         except Exception as e:
             print(f">>> [Hardware] Error during closing: {e}")
+log.auto_logger.hook_agv_drive(AGVHardware)
