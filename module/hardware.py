@@ -66,11 +66,30 @@ class AGVHardware:
         print("🦾 [GRAB] 물체 수거를 시작합니다...")
         
         # 1. 팔을 내려서 물체 위치로 이동 (GRAB Position)
+        # xyInput: toy_clearner 값 (200, -90)
         self.servo.xyInput(200, -90)
         time.sleep(1.5)
         
         # 2. 그리퍼 닫기 (물체 잡기)
+        # ID 4, Angle 40 (Close)
         self.servo.servoAngleCtrl(4, 40, -1, 150)
         time.sleep(1.0)
         
-        print("📦 [GRAB] 물체
+        print("📦 [GRAB] 물체 획득! 바구니로 이동합니다.")
+
+        # 3. 바구니로 이동 (PLACE IN BASKET)
+        # ID 2, 3번을 100도로 이동하여 뒤로 젖힘
+        self.servo.servoAngleCtrl(2, 100, -1, 200)
+        self.servo.servoAngleCtrl(3, 100, 1, 200)
+        time.sleep(3.0) # 팔이 뒤로 넘어가는 시간
+        
+        # 4. 그리퍼 열기 (떨구기)
+        self.servo.servoAngleCtrl(4, 100, 1, 150)
+        time.sleep(1.0)
+        
+        # 5. 팔 원위치 (Initial Position)
+        self.servo.servoAngleCtrl(2, 0, 1, 200)
+        self.servo.servoAngleCtrl(3, 0, 1, 200)
+        time.sleep(1.5)
+        
+        print("✅ [GRAB] 수거 완료.")
