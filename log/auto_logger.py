@@ -1,108 +1,125 @@
 # 파일명: auto_logger.py
-import io
 import sys
-import functools # [추가] 데코레이터용
+import io
+import functools
+import time
 
 print(">>> [AutoLogger] System Hooking Initiated...")
 
 # =========================================================
-# 1. 라이브러리 가져오기
+# 1. 라이브러리 및 모듈 가져오기
 # =========================================================
 try:
     from jetbot import Robot
     print("[AutoLogger] Library found: jetbot.Robot")
 except ImportError:
     try:
-        from jetbot import Robot
+        from robot import Robot
         print("[AutoLogger] Local file found: robot.py")
     except ImportError:
         print("[AutoLogger] ❌ Error: 'Robot' 클래스를 찾을 수 없습니다.")
         sys.exit()
 
+TTLServo = None
 try:
     from SCSCtrl import TTLServo
     print("[AutoLogger] Library found: SCSCtrl.TTLServo")
 except ImportError:
-    TTLServo = None
+    print("[AutoLogger] ⚠️ Warning: TTLServo 모듈(SCSCtrl)을 찾을 수 없습니다. (서보 제어 로그 불가)")
 
 try:
-    from .robot_monitor import monitor
+    from log import monitor
 except ImportError:
     print("[AutoLogger] ❌ Error: 'robot_monitor.py' 파일이 없습니다.")
     sys.exit()
 
 # =========================================================
-# 2. 기본 Robot 클래스 후킹 (기존 로직 유지)
-# =========================================================
-print(">>> [AutoLogger] Injecting Hooks into Robot Class...")
-
-if hasattr(Robot, 'forward'):
-    Robot.forward = monitor.track_nav("moving")(Robot.forward)
-if hasattr(Robot, 'backward'):
-    Robot.backward = monitor.track_nav("moving")(Robot.backward)
-if hasattr(Robot, 'left'):
-    Robot.left = monitor.track_nav("turning")(Robot.left)
-if hasattr(Robot, 'right'):
-    Robot.right = monitor.track_nav("turning")(Robot.right)
-if hasattr(Robot, 'stop'):
-    Robot.stop = monitor.track_nav("stopped")(Robot.stop)
-
-if TTLServo:
-    if hasattr(TTLServo, 'xyInput'):
-        TTLServo.xyInput = monitor.track_ik()(TTLServo.xyInput)
-    if hasattr(TTLServo, 'servoAngleCtrl'):
-        TTLServo.servoAngleCtrl = monitor.track_servo()(TTLServo.servoAngleCtrl)
-
-# =========================================================
-# [신규 기능] Print 가로채기 데코레이터
+# 2. [기능] Print 감청 데코레이터
 # =========================================================
 def make_verbose(func):
-    """
-    함수 실행 중 발생하는 print 출력을 가로채서
-    MQTT 로그로 전송하고, 원래 화면에도 출력하는 데코레이터
-    """
+    # 이미 감청 장치가 달려있다면 원본 그대로 반환 (중복 방지)
+    if getattr(func, '_is_verbose_hooked', False):
+        return func
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # 1. 표준 출력(stdout) 가로채기 준비
         captured = io.StringIO()
         original_stdout = sys.stdout
         sys.stdout = captured
         
         try:
-            # 2. 원래 함수 실행 (이때 print는 captured에 저장됨)
             result = func(*args, **kwargs)
         except Exception as e:
-            sys.stdout = original_stdout # 에러 시 복구
+            sys.stdout = original_stdout
             print(f"Error in {func.__name__}: {e}")
             raise e
         finally:
-            # 3. 표준 출력 원상복구 (무조건 실행)
             sys.stdout = original_stdout
             
-        # 4. 가로챈 내용 처리
         output = captured.getvalue()
         if output:
-            # 원래 화면(콘솔)에도 출력 (줄바꿈 방지)
             print(output, end='') 
-            
-            # MQTT로 전송 (앞뒤 공백 제거)
             clean_msg = output.strip()
             if clean_msg:
-                # "🎨 색상 감지: Red" 같은 메시지가 GUI로 전송됨
                 monitor._send({"type": "log", "msg": clean_msg})
-                
         return result
-    return wrapper
-# =========================================================
-# 3. [신규 기능] AGVHardware 전용 후킹 함수
-# =========================================================
-# 파일명: log/auto_logger.py 의 hook_agv_drive 함수 수정
-
-def hook_agv_drive(agv_class):
     
-    # 1. __init__ 후킹 (원격 제어 연결) - 기존과 동일
-    original_init = agv_class.__init__
+    # 플래그 설정
+    wrapper._is_verbose_hooked = True
+    return wrapper
 
+# =========================================================
+# 3. 기본 Robot 클래스 후킹 (중복 방지 추가)
+# =========================================================
+def safe_hook(cls, method_name, decorator_factory, status_name=None):
+    """안전하게 후킹하는 헬퍼 함수"""
+    if not hasattr(cls, method_name): return
+    
+    original_method = getattr(cls, method_name)
+    # 이미 후킹된 메서드인지 확인 (속성 체크)
+    if getattr(original_method, '_is_nav_hooked', False):
+        return
+
+    print(f">>> [AutoLogger] Hooking {cls.__name__}.{method_name}...")
+    if status_name:
+        wrapped_method = decorator_factory(status_name)(original_method)
+    else:
+        wrapped_method = decorator_factory()(original_method)
+    
+    # 후킹 표시
+    wrapped_method._is_nav_hooked = True
+    setattr(cls, method_name, wrapped_method)
+
+print(">>> [AutoLogger] Injecting Hooks into Robot Class...")
+
+# 안전한 후킹 적용
+safe_hook(Robot, 'forward', monitor.track_nav, "moving")
+safe_hook(Robot, 'backward', monitor.track_nav, "moving")
+safe_hook(Robot, 'left', monitor.track_nav, "turning")
+safe_hook(Robot, 'right', monitor.track_nav, "turning")
+safe_hook(Robot, 'stop', monitor.track_nav, "stopped")
+
+# =========================================================
+# 4. 서보 모터(TTLServo) 후킹
+# =========================================================
+if TTLServo:
+    print(">>> [AutoLogger] Injecting Hooks into TTLServo...")
+    safe_hook(TTLServo, 'xyInput', monitor.track_ik)
+    safe_hook(TTLServo, 'servoAngleCtrl', monitor.track_servo)
+
+# =========================================================
+# 5. AGVHardware 전용 후킹
+# =========================================================
+def hook_agv_drive(agv_class):
+    # 클래스 단위 중복 체크 (또는 메서드 단위)
+    if getattr(agv_class.drive, '_is_nav_hooked', False):
+        print(f">>> [AutoLogger] ⚠️ {agv_class.__name__} is already hooked. Skipping.")
+        return
+
+    print(f">>> [AutoLogger] Hooking custom drive method for {agv_class.__name__}...")
+    
+    # (1) 초기화 후킹
+    original_init = agv_class.__init__
     @functools.wraps(original_init)
     def init_wrapper(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
@@ -113,22 +130,18 @@ def hook_agv_drive(agv_class):
                 l = float(data.get("left", 0.0))
                 r = float(data.get("right", 0.0))
                 self.drive(l, r)
-        
         monitor.set_callback(on_remote_command)
-
+    
     agv_class.__init__ = init_wrapper
 
-    # 2. drive 후킹 (로그 전송) - [수정됨: 상세 속도값 전송]
+    # (2) 주행 함수 후킹
     original_drive = agv_class.drive
     @functools.wraps(original_drive)
     def drive_wrapper(self, left, right):
         result = original_drive(self, left, right)
         try:
-            # 절대값 중 큰 것을 대표 속도로 사용
             speed = max(abs(left), abs(right))
             status = "moving" if speed > 0.05 else "stopped"
-            
-            # [수정 포인트] type='nav' 메시지에 왼쪽(l), 오른쪽(r) 상세 값을 포함시킴
             monitor._send({
                 "type": "nav", 
                 "status": status, 
@@ -138,8 +151,10 @@ def hook_agv_drive(agv_class):
             })
         except: pass
         return result
-        
+    
+    # 중복 방지 플래그 설정
+    drive_wrapper._is_nav_hooked = True
     agv_class.drive = drive_wrapper
-    print(">>> [AutoLogger] ✅ Custom drive hook applied (Detailed Logs)!")
+    print(">>> [AutoLogger] ✅ Custom drive hook applied (Detailed Logs & Remote)!")
 
-print(">>> [AutoLogger] Ready to hook.")
+print(">>> [AutoLogger] Ready.")

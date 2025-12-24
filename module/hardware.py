@@ -3,11 +3,7 @@ import time
 import log.auto_logger
 # 서보 라이브러리 임포트 (없는 경우 예외처리)
 
-try:
-    from SCSCtrl import TTLServo
-except ImportError:
-    TTLServo = None
-    print("⚠️ SCSCtrl 모듈을 찾을 수 없습니다. 서보 제어가 비활성화됩니다.")
+from jetbot.SCSCtrl import TTLServo
 
 class AGVHardware:
     def __init__(self):

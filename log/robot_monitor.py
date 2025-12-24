@@ -4,7 +4,8 @@ import functools
 import paho.mqtt.client as mqtt
 
 # [중요] PC의 IP 주소를 입력하세요 (로컬 테스트 시 127.0.0.1)
-BROKER_IP = "127.0.0.1" 
+# BROKER_IP = "10.60.222.92" 
+BROKER_IP = "70.12.228.194"
 # BROKER_IP = "192.168.0.X" 
 
 class RobotMonitor:
@@ -23,18 +24,18 @@ class RobotMonitor:
             self.client.connect(BROKER_IP, 1883, 5)
             self.client.loop_start()
         except Exception as e:
-            print(f">>> [Monitor] ❌ Socket Connection Error: {e}")
+            print(f">>> [Monitor] Socket Connection Error: {e}")
 
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            print(f">>> [Monitor] ✅ MQTT Connected! (IP: {BROKER_IP})")
+            print(f">>> [Monitor] MQTT Connected! (IP: {BROKER_IP})")
             # GUI 명령 수신을 위한 구독
             client.subscribe("ssafy_agv_robotpal/command")
         else:
-            print(f">>> [Monitor] ❌ Connection Failed: {rc}")
+            print(f">>> [Monitor] Connection Failed: {rc}")
 
     def on_disconnect(self, client, userdata, rc):
-        if rc != 0: print(f">>> [Monitor] ⚠️ Disconnected: {rc}")
+        if rc != 0: print(f">>> [Monitor] Disconnected: {rc}")
 
     def on_publish(self, client, userdata, mid):
         pass
