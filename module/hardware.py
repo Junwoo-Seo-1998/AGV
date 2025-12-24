@@ -12,7 +12,8 @@ class AGVHardware:
     def __init__(self):
         self.robot = Robot()
         try:
-            self.camera = Camera.instance(width=816, height=616)
+            # 초기 해상도는 224x224로 시작하지만, state에서 변경 가능
+            self.camera = Camera.instance(width=224, height=224)
             print("✅ 하드웨어(카메라/모터) 연결 성공")
         except RuntimeError:
             print("⚠️ 카메라가 이미 사용 중이거나 연결되지 않았습니다.")
@@ -29,13 +30,36 @@ class AGVHardware:
             return self.camera.value
         return None
 
+    def set_camera_resolution(self, width, height):
+        """
+        카메라 해상도를 동적으로 변경합니다.
+        현재 해상도와 다를 경우에만 카메라를 재시작합니다.
+        """
+        if self.camera is None:
+            return
+
+        # 현재 설정과 동일하면 변경하지 않음 (불필요한 딜레이 방지)
+        if self.camera.width == width and self.camera.height == height:
+            return
+
+        print(f"🔄 카메라 해상도 변경: {self.camera.width}x{self.camera.height} -> {width}x{height}")
+        
+        # 카메라 정지 후 설정 변경 및 재시작
+        self.camera.stop()
+        self.camera.width = width
+        self.camera.height = height
+        self.camera.start()
+        
+        # 카메라 재시작 후 이미지가 안정화될 때까지 잠시 대기
+        time.sleep(0.5)
+
     def drive(self, left, right):
         self.robot.left_motor.value = left
         self.robot.right_motor.value = right
 
     def stop(self):
         self.robot.stop()
-        # 카메라는 계속 켜두어야 OCR이 가능하므로 camera.stop()은 호출하지 않음 (필요시 추가)
+        # 카메라는 계속 켜두어야 OCR이 가능하므로 camera.stop()은 호출하지 않음
         
     def rotate_camera(self, angle, servo_id):
         """카메라를 지정된 각도로 회전 (OCRTask 코드 참조)"""
