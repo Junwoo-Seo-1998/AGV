@@ -1,5 +1,7 @@
 from jetbot import Robot, Camera
 import time
+import log.auto_logger
+# 서보 라이브러리 임포트 (없는 경우 예외처리)
 
 try:
     from SCSCtrl import TTLServo
@@ -39,8 +41,8 @@ class AGVHardware:
         time.sleep(0.5)
 
     def drive(self, left, right):
-        self.robot.left_motor.value = left
-        self.robot.right_motor.value = right
+        self.robot.left_motor.value = float(left)
+        self.robot.right_motor.value = float(right)
 
     def stop(self):
         """주행만 정지 (카메라는 켜둠 - OCR 등을 위해)"""
@@ -49,7 +51,7 @@ class AGVHardware:
     def rotate_camera(self, angle, servo_id):
         if self.servo:
             self.servo.servoAngleCtrl(servo_id, angle, 1, 100)
-            time.sleep(1.0)
+            time.sleep(1.0) # 회전 후 안정화 대기
 
     # [신규 추가] 프로그램 완전 종료 시 호출
     def close(self):
@@ -58,3 +60,6 @@ class AGVHardware:
         if self.camera:
             self.camera.stop()
             print("📷 카메라 자원 해제 완료")
+            
+log.auto_logger.hook_agv_drive(AGVHardware)
+

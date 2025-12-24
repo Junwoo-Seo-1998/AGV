@@ -5,6 +5,7 @@ from .states.tracking_state import LineTrackingState
 from .states.approach_state import ApproachState
 from .states.ocr_state import OCRCheckState
 
+import log.auto_logger
 class MissionManager:
     def __init__(self, hardware, brain):
         self.context = RobotContext()
@@ -17,7 +18,14 @@ class MissionManager:
             "OCR_CHECK": OCRCheckState(hardware),
             "IDLE": None
         }
-        self.current_state_name = "IDLE" 
+        # [핵심] 모든 State의 'process' 함수에 '도청 장치(Verbose Hook)' 설치
+        print(">>> [MissionManager] Hooking state processes for GUI logging...")
+        for name, state_obj in self.states.items():
+            if state_obj and hasattr(state_obj, 'process'):
+                # process 메서드를 'print 가로채기' 버전으로 교체
+                state_obj.process = log.auto_logger.make_verbose(state_obj.process)
+
+        self.current_state_name = "IDLE"
 
     def set_state(self, state_name):
         # 1. 이전 상태의 종료 함수(on_exit) 호출
