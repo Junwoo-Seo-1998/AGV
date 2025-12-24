@@ -32,5 +32,13 @@ try:
         time.sleep(0.001)
 
 except KeyboardInterrupt:
-    agv.stop()
-    print("🛑 정지 완료")
+    print("\n🛑 사용자 강제 종료 요청")
+
+except Exception as e:
+    print(f"\n❌ 오류 발생: {e}")
+
+finally:
+    # 에러가 나든, 멈추든 무조건 실행되는 구간
+    if 'agv' in locals():
+        agv.close()  # 카메라와 모터 모두 끄기
+    print("✅ 시스템 안전 종료 (카메라 해제됨)")
