@@ -12,7 +12,7 @@ class AGVHardware:
     def __init__(self):
         self.robot = Robot()
         try:
-            self.camera = Camera.instance(width=224, height=224)
+            self.camera = Camera.instance(width=816, height=616)
             print("✅ 하드웨어(카메라/모터) 연결 성공")
         except RuntimeError:
             print("⚠️ 카메라가 이미 사용 중이거나 연결되지 않았습니다.")

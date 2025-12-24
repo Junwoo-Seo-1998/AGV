@@ -4,6 +4,7 @@ from .context import RobotContext
 # (참고: module/states 폴더 안에 __init__.py를 만들어주세요)
 from .states.tracking_state import LineTrackingState
 from .states.ocr_state import OCRCheckState
+from .states.find_target_state import FindTargetState
 
 class MissionManager:
     def __init__(self, hardware, brain):
@@ -14,6 +15,7 @@ class MissionManager:
         self.states = {
             "TRACKING": LineTrackingState(hardware, brain),
             "OCR_CHECK": OCRCheckState(hardware),
+            "FIND_TARGET": OCRCheckState(hardware),
             "IDLE": None
         }
         self.current_state_name = "IDLE" 
