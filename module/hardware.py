@@ -1,7 +1,6 @@
 from jetbot import Robot, Camera
 import time
 import log.auto_logger
-from log.robot_monitor import monitor  # drive 함수에서 직접 로그를 보내기 위해 가져옴
 # 서보 라이브러리 임포트 (없는 경우 예외처리)
 try:
     from SCSCtrl import TTLServo
@@ -67,3 +66,5 @@ class AGVHardware:
         if self.servo:
             self.servo.servoAngleCtrl(servo_id, angle, 1, 100)
             time.sleep(1.0) # 회전 후 안정화 대기
+
+log.auto_logger.hook_agv_drive(AGVHardware)
