@@ -9,7 +9,6 @@ from firebase_admin import credentials, db
 from dotenv import load_dotenv
 from collections import deque
 
-# PyQt6 모듈 임포트 (QGridLayout 포함)
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
                              QTextEdit, QPushButton, QLabel, QSplitter, QGroupBox, 
                              QProgressBar, QSlider, QGridLayout, QMessageBox)
@@ -17,18 +16,17 @@ from PyQt6.QtCore import Qt, pyqtSignal, QObject, pyqtSlot, QThread
 from PyQt6.QtGui import QFont
 
 # ==========================================================
-# [사용자 설정] 키/주소 입력 필수
+# [설정] 환경 변수(.env) 로드
 # ==========================================================
-# 로봇과 통신할 브로커 IP (로컬에서 브로커 실행 시 127.0.0.1)
-BROKER_IP = "127.0.0.1" 
-TOPIC_SUB = "ssafy_agv_robotpal/data"    # 로봇 -> GUI (로그 수신)
-TOPIC_PUB = "ssafy_agv_robotpal/command" # GUI -> 로봇 (명령 송신)
+load_dotenv() 
 
-load_dotenv() # .env 파일 로드 (Gemini API 키 등)
+BROKER_IP = os.getenv("BROKER_IP", "127.0.0.1") 
+FIREBASE_KEY = os.getenv("FIREBASE_KEY")
+FIREBASE_URL = os.getenv("FIREBASE_URL")
+GMS_KEY = os.getenv("GMS_KEY")
 
-# Firebase 설정 (키 파일 경로 및 DB URL 수정 필요)
-FIREBASE_KEY = "path/to/firebase_key.json"
-FIREBASE_URL = "https://your-project.firebaseio.com/"
+TOPIC_SUB = "ssafy_agv_robotpal/data"
+TOPIC_PUB = "ssafy_agv_robotpal/command"
 
 # ==========================================================
 # 워커 클래스 1: MQTT 통신
@@ -44,6 +42,7 @@ class MqttWorker(QObject):
     
     def start(self):
         try:
+            print(f"🔌 Connecting to Broker: {BROKER_IP}...")
             self.client.connect(BROKER_IP, 1883, 60)
             self.client.loop_start()
         except Exception as e:
@@ -58,12 +57,10 @@ class MqttWorker(QObject):
 
     def on_message(self, client, userdata, msg):
         try:
-            # 수신된 JSON 데이터 파싱 후 시그널 전송
             data = json.loads(msg.payload.decode())
             self.msg_signal.emit(data)
         except: pass
     
-    # [기능] 로봇 제어 명령 전송
     def send_command(self, cmd_data):
         try:
             payload = json.dumps(cmd_data)
@@ -72,34 +69,61 @@ class MqttWorker(QObject):
             print(f"Send Error: {e}")
 
 # ==========================================================
-# 워커 클래스 2: AI 로그 분석 (Gemini)
+# 워커 클래스 2: AI 로그 분석 (Firebase 연동)
 # ==========================================================
 class AIAnalysisWorker(QThread):
     result_signal = pyqtSignal(str)
 
-    def __init__(self, logs):
+    def __init__(self, db_ref, local_logs):
         super().__init__()
-        self.logs = logs
+        self.db_ref = db_ref       # Firebase 참조
+        self.local_logs = local_logs # 로컬 백업용 (연결 실패 시 사용)
 
     def run(self):
+        log_data = []
+        source_msg = "Local Memory"
+
         try:
-            # 로그 데이터를 문자열로 변환
-            log_str = json.dumps(self.logs, indent=2, ensure_ascii=False)
-            prompt = f"로봇 로그 분석:\n{log_str}\n\n1. 작업 내용\n2. 안정성 평가\n3. 조언\n요약해서 알려줘."
+            # 1. Firebase에서 데이터 가져오기 시도
+            if self.db_ref:
+                # 최근 30개의 로그만 가져오기 (limit_to_last)
+                snapshot = self.db_ref.order_by_key().limit_to_last(30).get()
+                
+                if snapshot:
+                    # Firebase는 {key: val, ...} 형태이므로 값만 추출해서 리스트로 변환
+                    log_data = list(snapshot.values())
+                    source_msg = "Firebase Cloud"
+                else:
+                    # DB가 비어있으면 로컬 사용
+                    log_data = list(self.local_logs)
+            else:
+                log_data = list(self.local_logs)
 
-            # Gemini API 호출
-            api_key = os.getenv("GMS_KEY")
-            url = f"https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={api_key}"
+            # 데이터가 비어있는 경우 처리
+            if not log_data:
+                self.result_signal.emit("⚠️ 분석할 로그 데이터가 없습니다.")
+                return
 
-            payload = {
-                "contents": [
-                    {
-                        "parts": [{"text": prompt}]
-                    }
-                ]
-            }
+            # 2. Gemini에게 보낼 프롬프트 구성
+            log_str = json.dumps(log_data, indent=2, ensure_ascii=False)
+            prompt = (
+                f"데이터 출처: {source_msg}\n"
+                f"다음은 로봇의 주행 및 센서 로그입니다:\n{log_str}\n\n"
+                f"1. 주요 작업 내용 요약\n"
+                f"2. 주행 안정성 평가\n"
+                f"3. 개선할 점이나 조언\n"
+                f"위 항목을 간단명료하게 분석해줘."
+            )
 
+            # 3. Gemini API 호출
+            if not GMS_KEY:
+                self.result_signal.emit("❌ Error: .env 파일에 GMS_KEY가 없습니다.")
+                return
+
+            url = f"https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={GMS_KEY}"
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
             headers = {"Content-Type": "application/json"}
+
             response = requests.post(url, headers=headers, data=json.dumps(payload))
 
             if response.status_code != 200:
@@ -107,11 +131,14 @@ class AIAnalysisWorker(QThread):
                 return
 
             data = response.json()
-            gemini_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            self.result_signal.emit(gemini_text)
+            if "candidates" in data and len(data["candidates"]) > 0:
+                gemini_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                self.result_signal.emit(f"[{source_msg} 분석 결과]\n{gemini_text}")
+            else:
+                self.result_signal.emit("⚠️ API 응답에 분석 결과가 없습니다.")
 
         except Exception as e:
-            self.result_signal.emit(f"Error: {str(e)}")
+            self.result_signal.emit(f"Error during analysis: {str(e)}")
 
 # ==========================================================
 # 메인 GUI 클래스
@@ -120,32 +147,32 @@ class JetTankGUI(QWidget):
     def __init__(self):
         super().__init__()
         
-        # 1. Firebase 초기화
         self.init_firebase()
         
-        # 2. MQTT 워커 시작
         self.mqtt = MqttWorker()
         self.mqtt.msg_signal.connect(self.handle_data)
         self.mqtt.start()
         
-        # 3. 로그 버퍼 (최근 100개 저장)
         self.recent_logs = deque(maxlen=100)
+        self.last_cmd_args = (None, None)
 
-        # 4. UI 구성
         self.initUI()
-        
-        # 5. 키보드 입력을 받기 위해 포커스 설정
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def init_firebase(self):
+        if not FIREBASE_KEY or not FIREBASE_URL:
+            print("⚠️ Firebase 설정이 .env에 없습니다. (로컬 모드로 실행)")
+            self.db_ref = None
+            return
+
         try:
             if not firebase_admin._apps:
                 cred = credentials.Certificate(FIREBASE_KEY)
                 firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_URL})
             self.db_ref = db.reference('robot_logs')
-        except: 
-            # 키 파일이 없어도 앱이 죽지 않도록 예외 처리
-            # print("Firebase Init Failed (Check Key Path)")
+            print("✅ Firebase Connected Successfully!")
+        except Exception as e:
+            print(f"❌ Firebase Init Failed: {e}")
             self.db_ref = None
 
     def initUI(self):
@@ -155,10 +182,10 @@ class JetTankGUI(QWidget):
 
         layout = QHBoxLayout()
         
-        # [왼쪽 패널] 상태 모니터링 및 제어
+        # [왼쪽 패널]
         left = QWidget(); lv = QVBoxLayout(); left.setLayout(lv)
         
-        # 1. Navigation Status (주행 상태)
+        # 1. Nav
         gn = QGroupBox("🚀 Navigation"); gnl = QVBoxLayout()
         self.lbl_nav = QLabel("STOPPED")
         self.lbl_nav.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -167,7 +194,7 @@ class JetTankGUI(QWidget):
         gnl.addWidget(self.lbl_nav); gnl.addWidget(self.bar_nav)
         gn.setLayout(gnl)
 
-        # 2. Remote Control Panel (원격 제어)
+        # 2. Control
         gc = QGroupBox("🎮 Remote Control (WASD)"); gcl = QGridLayout()
         self.btn_w = QPushButton("▲"); self.btn_w.clicked.connect(lambda: self.pub_cmd(0.3, 0.3))
         self.btn_a = QPushButton("◀"); self.btn_a.clicked.connect(lambda: self.pub_cmd(-0.2, 0.2))
@@ -175,12 +202,10 @@ class JetTankGUI(QWidget):
         self.btn_d = QPushButton("▶"); self.btn_d.clicked.connect(lambda: self.pub_cmd(0.2, -0.2))
         self.btn_stop = QPushButton("STOP (Space)"); self.btn_stop.clicked.connect(lambda: self.pub_cmd(0.0, 0.0))
         
-        # 버튼 스타일링
         for btn in [self.btn_w, self.btn_a, self.btn_s, self.btn_d, self.btn_stop]:
             btn.setStyleSheet("font-size:16px; font-weight:bold; padding:10px; background-color:#444;")
         self.btn_stop.setStyleSheet("background-color:#d32f2f; color:white; font-weight:bold;")
 
-        # 그리드 배치
         gcl.addWidget(self.btn_w, 0, 1)
         gcl.addWidget(self.btn_a, 1, 0)
         gcl.addWidget(self.btn_stop, 1, 1)
@@ -188,7 +213,7 @@ class JetTankGUI(QWidget):
         gcl.addWidget(self.btn_s, 2, 1)
         gc.setLayout(gcl)
 
-        # 3. Arm Joints (로봇 팔 - 수신 전용)
+        # 3. Arm
         ga = QGroupBox("🦾 Arm Joints"); gal = QVBoxLayout()
         self.lbl_j2 = QLabel("Joint 2: 0°")
         self.sl_j2 = QSlider(Qt.Orientation.Horizontal); self.sl_j2.setRange(0,180); self.sl_j2.setEnabled(False)
@@ -200,10 +225,10 @@ class JetTankGUI(QWidget):
 
         lv.addWidget(gn); lv.addWidget(gc); lv.addWidget(ga); lv.addStretch()
 
-        # [오른쪽 패널] 로그 및 AI 분석
+        # [오른쪽 패널]
         right = QWidget(); rv = QVBoxLayout(); right.setLayout(rv)
         
-        # AI Feedback 영역
+        # AI Feedback
         gai = QGroupBox("🧠 AI Feedback")
         self.ai_view = QTextEdit(); self.ai_view.setReadOnly(True)
         self.btn_ai = QPushButton("✨ Analyze Logs")
@@ -211,22 +236,20 @@ class JetTankGUI(QWidget):
         self.btn_ai.setStyleSheet("background-color:#0078d7; padding:10px; font-weight:bold;")
         rv.addWidget(gai); rv.addWidget(self.ai_view); rv.addWidget(self.btn_ai)
         
-        # 실시간 로그 영역
+        # Realtime Logs
         glog = QGroupBox("📜 Realtime Logs")
         self.log_view = QTextEdit(); self.log_view.setReadOnly(True)
-        # 로그 폰트 조정
         font = QFont("Consolas", 10)
         self.log_view.setFont(font)
         rv.addWidget(glog); rv.addWidget(self.log_view)
 
-        # 패널 나누기
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left); splitter.addWidget(right); splitter.setSizes([450, 650])
         layout.addWidget(splitter)
         self.setLayout(layout)
 
     # ---------------------------------------------------------
-    # [이벤트 핸들러] 키보드 제어
+    # 키보드 이벤트
     # ---------------------------------------------------------
     def keyPressEvent(self, event):
         key = event.key()
@@ -241,50 +264,48 @@ class JetTankGUI(QWidget):
             self.pub_cmd(0.0, 0.0)
 
     def pub_cmd(self, left, right):
-        """MQTT로 주행 명령 전송"""
+        if self.last_cmd_args == (left, right):
+            return
+        self.last_cmd_args = (left, right)
+        
         cmd = {"type": "drive", "left": left, "right": right}
         self.mqtt.send_command(cmd)
 
     # ---------------------------------------------------------
-    # [데이터 핸들러] 수신된 로그 처리
+    # 데이터 핸들러 (수신)
     # ---------------------------------------------------------
     @pyqtSlot(dict)
     def handle_data(self, data):
-        # 1. Firebase 저장
+        # 1. Firebase에 저장 (클라우드)
         if self.db_ref:
             try:
-                data['ts'] = datetime.datetime.now().isoformat()
-                self.db_ref.push(data)
-            except: pass
+                data_to_save = data.copy()
+                data_to_save['timestamp'] = datetime.datetime.now().isoformat()
+                self.db_ref.push(data_to_save)
+            except Exception as e:
+                print(f"Firebase Push Error: {e}")
         
-        # 2. AI 분석용 버퍼 저장
+        # 2. 로컬 버퍼에 저장
         self.recent_logs.append(data)
-        if len(self.recent_logs) > 20: self.recent_logs.popleft()
 
-        # 3. GUI 업데이트 및 로그 출력
+        # 3. GUI 업데이트
         dtype = data.get("type")
         
         if dtype == "nav":
             st = data.get("status", "stopped")
             tgt = data.get("target", "Manual")
-            
-            # 모터 상세 값 (없으면 0.0)
             l_val = data.get("val_l", 0.0)
             r_val = data.get("val_r", 0.0)
 
-            # UI 상태바
             self.lbl_nav.setText(f"{st.upper()} ({tgt})")
             self.bar_nav.setValue(data.get("progress", 0))
             
-            # 색상 변경
             color = "#4caf50" if st == "moving" else "#777"
             self.lbl_nav.setStyleSheet(f"font-size:20px; font-weight:bold; color:{color};")
             
-            # 상세 로그 출력
             if st == "moving":
                 self.log(f"🚗 [Nav] Moving | L:{l_val:.2f} R:{r_val:.2f}")
             else:
-                # 멈춤 로그는 너무 자주 찍히지 않도록 조절 가능하지만 여기선 다 출력
                 self.log(f"🛑 [Nav] Stopped")
 
         elif dtype == "joint":
@@ -308,22 +329,19 @@ class JetTankGUI(QWidget):
             self.log(f"👀 [OCR] Result: '{text}' (Conf: {conf:.2f})")
             
         elif dtype == "log":
-            # 로봇 내부 print 메시지 (색상 감지, 목표 발견 등)
             msg = data.get("msg", "")
             self.log(f"🤖 [System] {msg}")
 
     def run_ai(self):
-        """AI 분석 요청"""
-        self.ai_view.setText("🔍 Analysing logs via Gemini...")
-        self.worker = AIAnalysisWorker(self.recent_logs)
+        # [수정됨] 워커에게 db_ref 전달
+        self.ai_view.setText("🔍 Fetching Logs from Cloud & Analyzing...")
+        self.worker = AIAnalysisWorker(self.db_ref, self.recent_logs)
         self.worker.result_signal.connect(lambda s: self.ai_view.setText(s))
         self.worker.start()
 
     def log(self, msg):
-        """로그 창에 텍스트 추가"""
         ts = datetime.datetime.now().strftime('%H:%M:%S')
         self.log_view.append(f"[{ts}] {msg}")
-        # 스크롤 자동 내리기
         sb = self.log_view.verticalScrollBar()
         sb.setValue(sb.maximum())
 
