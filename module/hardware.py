@@ -5,32 +5,37 @@ try:
     from SCSCtrl import TTLServo
 except ImportError:
     TTLServo = None
-    print("⚠️ SCSCtrl 모듈을 찾을 수 없습니다.")
+    print("⚠️ SCSCtrl 모듈을 찾을 수 없습니다. 서보 제어가 비활성화됩니다.")
 
 class AGVHardware:
     def __init__(self):
         self.robot = Robot()
         try:
             self.camera = Camera.instance(width=224, height=224)
+            print("✅ 하드웨어(카메라/모터) 연결 성공")
         except RuntimeError:
+            print("⚠️ 카메라가 이미 사용 중이거나 연결되지 않았습니다.")
             self.camera = None
 
         if TTLServo:
             self.servo = TTLServo
-            # 초기 팔 위치 설정
+            # 초기화: 팔을 안전한 위치(Up)로 이동 & 그리퍼 열기
             self.servo.servoAngleCtrl(2, 0, 1, 150)
             self.servo.servoAngleCtrl(3, 0, 1, 150)
-            self.servo.servoAngleCtrl(4, 100, 1, 150) # 열기
+            self.servo.servoAngleCtrl(4, 100, 1, 150) 
         else:
             self.servo = None
 
     def get_frame(self):
-        return self.camera.value if self.camera else None
+        if self.camera:
+            return self.camera.value
+        return None
 
-    # [수정] 카메라 해상도 변경 기능
     def set_camera_resolution(self, width, height):
         if self.camera is None: return
         if self.camera.width == width and self.camera.height == height: return
+
+        print(f"🔄 카메라 해상도 변경: {self.camera.width}x{self.camera.height} -> {width}x{height}")
         self.camera.stop()
         self.camera.width = width
         self.camera.height = height
@@ -42,34 +47,31 @@ class AGVHardware:
         self.robot.right_motor.value = right
 
     def stop(self):
+        """주행만 정지 (카메라는 켜둠)"""
         self.robot.stop()
+        
+    # [복구됨] OCR 상태에서 카메라 각도 조절에 사용
+    def rotate_camera(self, angle, servo_id):
+        if self.servo:
+            # servoAngleCtrl(ID, Angle, Speed, Direction)
+            # 기존 코드: self.servo.servoAngleCtrl(servo_id, angle, 1, 100)
+            self.servo.servoAngleCtrl(servo_id, angle, 1, 500)
+            time.sleep(1.0)
 
-    # [요청하신 Grab 함수 구현]
+    # [신규 추가] 짐 수거(Grab) 시퀀스
     def grab_sequence(self):
-        if not self.servo: return
+        if not self.servo:
+            print("⚠️ 서보 모터가 연결되지 않았습니다.")
+            return
 
-        print("🦾 [GRAB] 물체 집기 시작")
+        print("🦾 [GRAB] 물체 수거를 시작합니다...")
         
-        # 1. Position arm down
+        # 1. 팔을 내려서 물체 위치로 이동 (GRAB Position)
         self.servo.xyInput(200, -90)
-        time.sleep(1)
+        time.sleep(1.5)
         
-        # 2. Close grip
+        # 2. 그리퍼 닫기 (물체 잡기)
         self.servo.servoAngleCtrl(4, 40, -1, 150)
-        time.sleep(2) # (5초는 너무 길어서 2초로 조정, 필요시 5로 변경)
+        time.sleep(1.0)
         
-        # 3. PLACE IN BASKET (Position arm at back)
-        self.servo.servoAngleCtrl(2, 100, -1, 200)
-        self.servo.servoAngleCtrl(3, 100, 1, 200)
-        time.sleep(3) # (5초 -> 3초)
-        
-        # 4. Open grip
-        self.servo.servoAngleCtrl(4, 100, 1, 150)
-        time.sleep(1) # (3초 -> 1초)
-        
-        # 5. Position arm at initial position
-        self.servo.servoAngleCtrl(2, 0, 1, 200)
-        self.servo.servoAngleCtrl(3, 0, 1, 200)
-        time.sleep(2)
-        
-        print("✅ [GRAB] 완료")
+        print("📦 [GRAB] 물체
