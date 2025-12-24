@@ -8,11 +8,10 @@ class ApproachState:
         self.brain = brain
         self.color_recognizer = ColorRecognizer()
         
-        # [설정] 정지 판정 기준
-        self.STOP_Y_THRESHOLD = 190   # 화면 거의 끝까지 볼 때까지 대기
-        self.OVERRUN_TIME = 0.8       # [중요] 도착 판정 후 더 밀고 들어가는 시간 (초)
+        # [설정]
+        self.STOP_Y_THRESHOLD = 190
+        self.OVERRUN_TIME = 0.8       # 추가 전진 시간
         
-        # 주행 관련 설정
         self.BASE_SPEED = 0.2         
         self.MIN_MOVE_SPEED = 0.13    
         self.ALIGNMENT_SENSITIVITY = 2.0 
@@ -24,16 +23,40 @@ class ApproachState:
         self.hw.set_camera_resolution(224, 224)
         self.last_known_y = 0
 
-    # 도착 시 실행할 '마무리 전진' 함수
+    # [핵심 수정] 오버런 중에도 라인을 보면서 주행
     def finish_approach(self, context, reason):
-        print(f"🏁 {reason} -> ⏱️ {self.OVERRUN_TIME}초간 추가 전진하여 올라탑니다!")
+        print(f"🏁 {reason} -> ⏱️ {self.OVERRUN_TIME}초간 라인 유지하며 진입!")
         
-        # 정렬된 상태로 직진 (속도는 조금 낮춰서 안전하게)
-        self.hw.drive(0.15, 0.15)
-        time.sleep(self.OVERRUN_TIME)
+        start_time = time.time()
         
+        # 오버런 전용 속도 (천천히, 신중하게)
+        overrun_speed = 0.15  
+        
+        # 기존 속도 백업
+        original_speed = context.speed_gain
+        context.speed_gain = overrun_speed
+
+        # 정해진 시간 동안 반복문 실행
+        while time.time() - start_time < self.OVERRUN_TIME:
+            # 1. 이미지 캡처
+            image = self.hw.get_frame()
+            if image is None: continue
+            
+            # 2. 라인 트래킹 계산 (Brain 사용)
+            #    여기서는 색상을 무시하고 오직 '라인'만 보고 갑니다.
+            left, right = self.brain.calculate(image, context)
+            
+            # 3. 구동
+            self.hw.drive(left, right)
+            
+            # (짧은 대기 - CPU 점유율 방지 및 카메라 FPS 맞춤)
+            time.sleep(0.01)
+        
+        # 속도 복구 및 정지
+        context.speed_gain = original_speed
         self.hw.stop()
-        print("🛑 완전히 정지했습니다. OCR을 시작합니다.")
+        
+        print("🛑 오버런 완료. 정지했습니다.")
         return "OCR_CHECK"
 
     def process(self, context):
@@ -42,25 +65,24 @@ class ApproachState:
 
         color_res = self.color_recognizer.recognize(image)
         
-        # 1. 타겟 소실 처리
+        # 1. 타겟 소실 (도착 판단)
         if not color_res:
-            # 타겟이 화면 하단(150px 이상)에서 사라졌다면 -> "도착해서 로봇 밑으로 들어간 것"
             if self.last_known_y > 150:
-                return self.finish_approach(context, reason=f"타겟 하단 진입 (Last Y: {self.last_known_y})")
+                return self.finish_approach(context, reason=f"타겟 하단 통과 (Last Y: {self.last_known_y})")
             else:
-                print(f"💨 타겟 소실 (Last Y: {self.last_known_y}) -> 일반 주행 복귀")
+                print(f"💨 타겟 소실 -> 일반 주행 복귀")
                 return "TRACKING"
 
-        # 2. 다른 색이면 복귀
+        # 2. 색상 검증
         if color_res.color != context.last_detected_color:
              return "TRACKING"
 
-        # 3. 목표 도달 확인 (화면에 보일 때)
+        # 3. 목표 도달 확인 (보이는 상태)
         self.last_known_y = color_res.center_y
         if self.last_known_y >= self.STOP_Y_THRESHOLD:
             return self.finish_approach(context, reason=f"정위치 도달 (Visible Y: {self.last_known_y})")
 
-        # 4. 주행 로직 (최소 속도 보장)
+        # 4. 접근 주행 (가변 속도)
         error = abs(context.current_x)
         calculated_speed = self.BASE_SPEED * max(0.0, (1.0 - error * self.ALIGNMENT_SENSITIVITY))
         
