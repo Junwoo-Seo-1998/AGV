@@ -1,4 +1,6 @@
 from vision.color import ColorRecognizer
+from SCSCtrl import TTLServo
+import time
 
 class LineTrackingState:
     def __init__(self, hardware, brain):
@@ -8,6 +10,8 @@ class LineTrackingState:
 
     def on_enter(self, context):
         print("🚀 라인 트래킹 시작 (Camera: 224x224)")
+
+        
         self.hw.set_camera_resolution(224, 224)
 
     def process(self, context):
@@ -18,7 +22,14 @@ class LineTrackingState:
         
         if color_res:
             # (A) 완전히 새로운 색상인 경우에만 접근 모드 시작
+            
             if context.last_detected_color != color_res.color:
+                
+                if color_res.color == "orange":
+                    context.last_detected_color = color_res.color
+                    print("orange 발견! 집기 시작!")
+                    return "FIND_TARGET"
+                
                 print(f"🎨 새로운 타겟 발견: {color_res.color} -> 정밀 접근 시작")
                 context.last_detected_color = color_res.color # 업데이트
                 return "APPROACH"

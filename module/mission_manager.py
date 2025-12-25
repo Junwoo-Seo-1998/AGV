@@ -1,22 +1,23 @@
 from .context import RobotContext
 
-# 상태 클래스들 import
+# 분리한 모듈들을 import 합니다.
+# (참고: module/states 폴더 안에 __init__.py를 만들어주세요)
 from .states.tracking_state import LineTrackingState
-from .states.approach_state import ApproachState
 from .states.ocr_state import OCRCheckState
-from .states.pickup_state import PickupState
+from .states.find_target_state import FindTargetState
+from .states.approach_state import ApproachState
 
 class MissionManager:
     def __init__(self, hardware, brain):
         self.context = RobotContext()
         self.hw = hardware
         
-        # 각 상태 클래스 인스턴스 생성
+        # 각 상태 클래스에 필요한 의존성을 주입하여 인스턴스 생성
         self.states = {
             "TRACKING": LineTrackingState(hardware, brain),
-            "APPROACH": ApproachState(hardware, brain),
             "OCR_CHECK": OCRCheckState(hardware),
-            "PICKUP": PickupState(hardware), # 이름 변경 (PICKUP)
+            "APPROACH": ApproachState(hardware, brain),
+            "FIND_TARGET": FindTargetState(hardware),
             "IDLE": None
         }
         self.current_state_name = "IDLE" 

@@ -2,10 +2,12 @@ import torch
 import time
 from torchvision.models import resnet18
 
+
 # 경로 설정 코드 삭제! 그냥 import 하면 됩니다.
 from module.hardware import AGVHardware
 from module.driving_logic import LineTrackingBrain
 from module.mission_manager import MissionManager
+from SCSCtrl import TTLServo
 
 # 1. 모델 로드
 model = resnet18(pretrained=False)
@@ -22,10 +24,15 @@ manager = MissionManager(agv, brain)
 # 타겟 설정
 manager.context.target_plate = "187고1604"
 
+TTLServo.servoAngleCtrl(1, 0, 1, 500)
+TTLServo.servoAngleCtrl(2, 0, 1, 500)
+TTLServo.servoAngleCtrl(3, 0, 1, 500)
+TTLServo.servoAngleCtrl(4, 100, 1, 500)
+TTLServo.servoAngleCtrl(5, 25, 1, 500)
 # 3. 실행
 try:
     print("🏁 AGV 출발!")
-    manager.set_state("TRACKING")
+    manager.set_state("FIND_TARGET")
     
     while True:
         manager.update()

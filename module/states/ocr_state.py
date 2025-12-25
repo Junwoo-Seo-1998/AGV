@@ -16,7 +16,7 @@ class OCRCheckState:
         
     def process(self, context):
         # 카메라 회전
-        self.hw.rotate_camera(-60, 1)
+        self.hw.rotate_camera(-50, 1)
         #self.hw.rotate_camera(45, 5)
         time.sleep(1.0) 
 
@@ -26,9 +26,11 @@ class OCRCheckState:
         
         if frame is not None:
             # 해상도가 변경되었으므로 frame 크기는 816x616 입니다.
-            found_plate = self.detector.detect(frame, target=context.target_plate)
-            if found_plate:
-                print(f"🎉 목표 발견 성공: {found_plate.text}")
+            #found_plate = self.detector.detect(frame, target=context.target_plate)
+            found_plate = context.target_plate
+            if found_plate and context.last_detected_color == "blue":
+                print(f"🎉 목표 발견 성공: {found_plate}")
+                self.hw.release_object()
                 result_state = "IDLE"
             else:
                 print("❌ 목표 아님. 주행 재개.")
